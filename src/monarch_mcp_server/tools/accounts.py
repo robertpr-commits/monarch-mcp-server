@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 from pydantic import RootModel, ValidationError
 
-from monarch_mcp_server.app import mcp
+from monarch_mcp_server.app import mcp, write_tool
 from monarch_mcp_server.client import get_monarch_client
 from monarch_mcp_server.helpers import json_success, json_error
 
@@ -50,7 +50,7 @@ async def get_accounts() -> str:
         return json_error("get_accounts", e)
 
 
-@mcp.tool()
+@write_tool()
 async def refresh_accounts(account_ids: Optional[List[str]] = None) -> str:
     """Request account data refresh from financial institutions.
 
@@ -143,7 +143,7 @@ async def get_account_balance_history(account_id: str) -> str:
         return json_error("get_account_balance_history", e)
 
 
-@mcp.tool()
+@write_tool()
 async def upload_account_balance_history(
     account_id: str,
     corrections: str,

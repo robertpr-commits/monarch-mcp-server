@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Dict, List
 
-from monarch_mcp_server.app import mcp
+from monarch_mcp_server.app import mcp, write_tool
 from monarch_mcp_server.client import get_monarch_client
 from monarch_mcp_server.helpers import json_success, json_error
 
@@ -31,7 +31,7 @@ async def get_transaction_splits(transaction_id: str) -> str:
         return json_error("get_transaction_splits", e)
 
 
-@mcp.tool()
+@write_tool()
 async def split_transaction(
     transaction_id: str,
     splits: List[Dict[str, Any]],
