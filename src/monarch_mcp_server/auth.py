@@ -96,4 +96,10 @@ async def login_with_token_interactive(ctx: Context) -> str:
 
 async def logout() -> str:
     secure_session.delete_token()
+    if secure_session.env_token_present():
+        return (
+            "Cleared stored Monarch session. Note: MONARCH_TOKEN is still set in "
+            "the environment and will keep authenticating this server — unset it "
+            "and restart to fully sign out."
+        )
     return "Cleared stored Monarch session."

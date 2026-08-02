@@ -3,6 +3,9 @@ Secure session management for Monarch Money MCP Server.
 
 Uses the system keyring when available, with an automatic file-based
 fallback for environments without a keyring backend (e.g. WSL, headless Linux).
+A MONARCH_TOKEN environment variable overrides both, so deployments with no
+interactive login available (containers, CI, Claude Code on the web) can be
+configured entirely through their environment.
 """
 
 import logging
@@ -21,6 +24,15 @@ KEYRING_USERNAME = "monarch-token"
 # File-based fallback location
 _TOKEN_DIR = Path.home() / ".monarch-mcp-server"
 _TOKEN_FILE = _TOKEN_DIR / "token"
+
+# Environment variable holding a pre-provisioned session token
+TOKEN_ENV_VAR = "MONARCH_TOKEN"
+
+
+def _load_token_env() -> Optional[str]:
+    """Read a session token from the environment, if one is set."""
+    token = (os.getenv(TOKEN_ENV_VAR) or "").strip()
+    return token or None
 
 
 def _keyring_available() -> bool:
@@ -94,8 +106,39 @@ class SecureMonarchSession:
 
     # -- public API ----------------------------------------------------------
 
+    def env_token_present(self) -> bool:
+        """Check whether a token is supplied via the environment."""
+        return _load_token_env() is not None
+
+    def token_source(self) -> Optional[str]:
+        """Name the backend supplying the active token, without returning it.
+
+        Returns ``"$MONARCH_TOKEN"``, ``"keyring"``, ``"file"``, or ``None``.
+        """
+        if _load_token_env():
+            return f"${TOKEN_ENV_VAR}"
+
+        if self._use_keyring:
+            try:
+                import keyring
+                if keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME):
+                    return "keyring"
+            except Exception as e:
+                logger.warning(f"⚠️  Keyring read failed, trying file fallback: {e}")
+
+        if _TOKEN_FILE.is_file() and _TOKEN_FILE.read_text().strip():
+            return "file"
+
+        return None
+
     def save_token(self, token: str) -> None:
         """Save the authentication token to the system keyring or file fallback."""
+        if _load_token_env():
+            logger.warning(
+                f"⚠️  ${TOKEN_ENV_VAR} is set and takes precedence — the token "
+                "being saved will stay dormant until that variable is unset."
+            )
+
         if self._use_keyring:
             try:
                 import keyring
@@ -110,7 +153,18 @@ class SecureMonarchSession:
         self._cleanup_old_session_files()
 
     def load_token(self) -> Optional[str]:
-        """Load the authentication token from the system keyring or file fallback."""
+        """Load the authentication token.
+
+        Precedence: ``MONARCH_TOKEN`` environment variable, then the system
+        keyring, then the file fallback. The environment variable wins so a
+        headless deployment can be configured without an interactive login,
+        and so its token is never silently shadowed by a stale stored one.
+        """
+        token = _load_token_env()
+        if token:
+            logger.info(f"✅ Token loaded from ${TOKEN_ENV_VAR}")
+            return token
+
         if self._use_keyring:
             try:
                 import keyring
@@ -144,6 +198,14 @@ class SecureMonarchSession:
         # Always try file cleanup too
         self._delete_token_file()
         self._cleanup_old_session_files()
+
+        # An env var lives outside this process — say so rather than reporting
+        # a sign-out that did not actually take effect.
+        if _load_token_env():
+            logger.warning(
+                f"⚠️  ${TOKEN_ENV_VAR} is still set in the environment and will "
+                "keep authenticating this server — unset it to fully sign out."
+            )
 
     def get_authenticated_client(self) -> Optional[MonarchMoney]:
         """Get an authenticated MonarchMoney client."""

@@ -156,6 +156,47 @@ Follow the prompts:
 - Provide 2FA code if you have MFA enabled
 - Session will be saved automatically
 
+#### Option B: `MONARCH_TOKEN` Environment Variable
+
+For environments where no interactive login is possible — Docker, CI, or
+Claude Code on the web — supply a session token through the environment
+instead. This also works for MFA and SSO accounts, which cannot authenticate
+with `MONARCH_EMAIL`/`MONARCH_PASSWORD`.
+
+1. Sign in to Monarch Money in your browser
+2. Open DevTools → Application → Local Storage → `app.monarchmoney.com`
+3. Copy the value of the `token` key
+4. Set it as `MONARCH_TOKEN` in your environment:
+
+```bash
+export MONARCH_TOKEN="your-session-token"
+```
+
+Or in your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "monarch-money": {
+      "command": "uv",
+      "args": ["run", "monarch-mcp-server"],
+      "env": { "MONARCH_TOKEN": "your-session-token" }
+    }
+  }
+}
+```
+
+**Store it as a secret, never in source control.** A session token grants full
+read and write access to your Monarch account. Anything that can read the
+environment can use it, so prefer your platform's secret store over a
+committed config file. Revoke a leaked token by signing out of Monarch in the
+browser, which invalidates the session.
+
+**Precedence**: `MONARCH_TOKEN` wins over any token in the keyring or file
+fallback, so an explicitly configured deployment is never shadowed by a stale
+stored session. Because of that, `monarch_logout` cannot clear it — unset the
+variable and restart the server to sign out.
+
 ### 3. Start Using
 
 Once authenticated, use these tools directly in Claude Desktop or Claude Code:
@@ -233,6 +274,7 @@ Once authenticated, use these tools directly in Claude Desktop or Claude Code:
 - **One-Time Setup**: Authenticate once, use for weeks/months
 - **MFA Support**: Full support for two-factor authentication
 - **SSO/Google sign-in**: Use `monarch_login_with_token` to paste a session token from your browser
+- **Headless/containers**: Set `MONARCH_TOKEN` in the environment where no interactive login is possible
 - **Session Persistence**: No need to re-authenticate frequently
 - **Secure**: Credentials never pass through Claude
 
@@ -401,6 +443,14 @@ If you see "Authentication needed" errors:
 1. Run the setup command: `cd /path/to/your/monarch-mcp-server && python login_setup.py` (or `uv run python login_setup.py`)
 2. Restart Claude Desktop or Claude Code
 3. Try using a tool like `get_accounts`
+
+In a headless environment where step 1 isn't possible, set `MONARCH_TOKEN`
+instead — see [Option B](#option-b-monarch_token-environment-variable).
+
+Call `check_auth_status` to see which source a token is coming from
+(`$MONARCH_TOKEN`, `keyring`, or `file`). If you saved a token but the server
+keeps using an old session, `MONARCH_TOKEN` is likely set and taking
+precedence.
 
 ### Session Expired
 Sessions last for weeks, but if expired:

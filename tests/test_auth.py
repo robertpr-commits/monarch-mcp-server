@@ -105,9 +105,45 @@ class TestLoginWithTokenInteractive:
 
 class TestLogout:
     def test_clears_session(self, no_session_save):
+        no_session_save.env_token_present.return_value = False
         result = asyncio.run(auth.logout())
         assert "Cleared" in result
+        assert "MONARCH_TOKEN" not in result
         no_session_save.delete_token.assert_called_once()
+
+    def test_warns_when_env_token_survives_logout(self, no_session_save):
+        no_session_save.env_token_present.return_value = True
+        result = asyncio.run(auth.logout())
+        assert "Cleared" in result
+        assert "MONARCH_TOKEN" in result
+        no_session_save.delete_token.assert_called_once()
+
+
+class TestCheckAuthStatus:
+    @staticmethod
+    def run_status(source, monkeypatch):
+        from monarch_mcp_server.tools import auth as tools_auth
+
+        monkeypatch.delenv("MONARCH_EMAIL", raising=False)
+        with patch(
+            "monarch_mcp_server.tools.auth.secure_session.token_source",
+            return_value=source,
+        ):
+            return asyncio.run(tools_auth.check_auth_status())
+
+    def test_reports_env_source_and_precedence(self, monkeypatch):
+        result = self.run_status("$MONARCH_TOKEN", monkeypatch)
+        assert "$MONARCH_TOKEN" in result
+        assert "precedence" in result
+
+    def test_reports_keyring_source_without_precedence_note(self, monkeypatch):
+        result = self.run_status("keyring", monkeypatch)
+        assert "keyring" in result
+        assert "precedence" not in result
+
+    def test_reports_missing_token(self, monkeypatch):
+        result = self.run_status(None, monkeypatch)
+        assert "No authentication token found" in result
 
 
 class TestDebugSessionLoading:

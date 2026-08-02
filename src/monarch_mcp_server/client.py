@@ -32,11 +32,11 @@ async def get_monarch_client() -> MonarchMoney:
     if _cached_client is not None:
         return _cached_client
 
-    # Try to get authenticated client from secure session
+    # Try a stored token: $MONARCH_TOKEN, then keyring, then file fallback
     client = secure_session.get_authenticated_client()
 
     if client is not None:
-        logger.info("Using authenticated client from secure keyring storage")
+        logger.info(f"Using authenticated client from {secure_session.token_source()}")
         _cached_client = client
         return client
 
@@ -59,4 +59,8 @@ async def get_monarch_client() -> MonarchMoney:
             logger.error(f"Failed to login to Monarch Money: {e}")
             raise
 
-    raise RuntimeError("Authentication needed! Run: python login_setup.py")
+    raise RuntimeError(
+        "Authentication needed! Set MONARCH_TOKEN (a session token, works in "
+        "headless environments and with MFA/SSO accounts) or MONARCH_EMAIL and "
+        "MONARCH_PASSWORD in the environment, or run: python login_setup.py"
+    )
